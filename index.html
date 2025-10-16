@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>皮算用</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: "Segoe UI", sans-serif; background: #f6f8fa; padding: 2em; }
+    .container { background: white; max-width: 800px; margin: auto; padding: 2em; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h1 { text-align: center; color: #222; }
+    label { display: block; margin-top: 1em; font-weight: bold; }
+    input, select {
+      width: 100%;
+      padding: 0.6em;
+      margin-top: 0.3em;
+      font-size: 1em;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background-color: #fff;
+      appearance: none; /* ← 各ブラウザ固有のプルダウン装飾を無効化 */
+    }
+    select option {
+      background-color: #fff;  /* ← 透過を防ぐ */
+      color: #000;             /* ← 文字が見えやすい黒色 */
+    }
+    button { margin-top: 1.5em; padding: 0.8em; width: 100%; background: #007bff; color: white; border: none; border-radius: 6px; font-size: 1em; }
+    button:hover { background: #0056b3; cursor: pointer; }
+    .result { margin-top: 1.5em; background: #eef6ff; padding: 1em; border-radius: 8px; }
+    canvas { margin-top: 2em; }
+    .example { margin-top: 2em; font-size: 0.9em; background: #f9f9f9; padding: 1em; border-left: 4px solid #007bff; border-radius: 4px; }
+    .affiliate a {
+      color: #007bff;
+      text-decoration: none;
+      font-weight: bold;
+    }
+    .affiliate a:hover {
+    text-decoration: underline;
+    }
+    .disclaimer {
+      margin-top: 2em;
+    padding: 1em;
+    background: #fff8e1;
+    border-left: 4px solid #ff9800;
+    border-radius: 6px;
+    font-size: 0.85em;
+    color: #333;
+    line-height: 1.6;
+    }
+  
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>皮算用（投資シミュレーター）</h1>
+ 
+    <div class="example">
+      <strong>使用例：</strong><br>
+      ・初期投資額：100,000円<br>
+      ・毎月の積立：10,000円<br>
+      ・金利：年利5%（毎月複利で再投資）<br>
+      ・期間：10年<br>
+      ・引き出し：毎月5,000円を5年目から開始<br><br>
+      → 実運用を想定したリアルな資産推移をグラフで可視化できます。
+    </div>
+
+    <label>初期投資額（円）</label>
+    <input type="number" id="initial" value="100000">
+
+    <label>毎月の積立額（円）</label>
+    <input type="number" id="monthlyAdd" value="10000">
+
+    <label>金利の種類</label>
+    <select id="rateType">
+      <option value="daily">日利</option>
+      <option value="monthly" selected>月利</option>
+      <option value="yearly">年利</option>
+    </select>
+
+    <label>金利（%）</label>
+    <input type="number" id="rate" value="5">
+
+    <label>利息タイプ</label>
+    <select id="interestType">
+      <option value="compound" selected>複利</option>
+      <option value="simple">単利</option>
+    </select>
+
+    <label>得た利益の再投資タイミング</label>
+    <select id="reinvestFreq">
+      <option value="daily">毎日</option>
+      <option value="monthly" selected>毎月</option>
+      <option value="yearly">毎年</option>
+    </select>
+
+    <label>投資期間（年）</label>
+    <input type="number" id="years" value="10">
+
+    <label>毎月の引き出し額（円）</label>
+    <input type="number" id="withdraw" value="0">
+
+    <label>引き出し開始期間（年）</label>
+    <input type="number" id="withdrawStart" value="0">
+
+    <button onclick="simulate()">シミュレーションする</button>
+
+    <div class="result" id="result"></div>
+
+    <canvas id="chart" height="100"></canvas>
+    
+    <div class="affiliate">
+      <p>📈 投資を始める時は、証券会社に口座を作って、その口座の資金で売買します。</p>
+      <a href="https://kabu.dmm.com/lp-ft/020/" target="_blank" rel="noopener noreferrer">
+      【PR】株式会社ＤＭＭ．ｃｏｍ証券の公式サイトを見る
+      </a>
+    </div>
+    <div class="disclaimer">
+    <p>
+    本サイトの内容は、特定の金融商品の勧誘や投資助言を目的としたものではありません。<br>
+    掲載している情報は一般的な参考情報であり、将来の運用成果を保証するものではありません。<br>
+    投資に関する最終的な判断は、利用者ご自身の責任で行ってください。
+    </p>
+</div>
+  </div>
+
+  <script>
+    let chartInstance = null;
+
+    function simulate() {
+      let initial = parseFloat(document.getElementById('initial').value);
+      let monthlyAdd = parseFloat(document.getElementById('monthlyAdd').value);
+      let rate = parseFloat(document.getElementById('rate').value) / 100;
+      let rateType = document.getElementById('rateType').value;
+      let interestType = document.getElementById('interestType').value;
+      let reinvestFreq = document.getElementById('reinvestFreq').value;
+      let years = parseFloat(document.getElementById('years').value);
+      let withdraw = parseFloat(document.getElementById('withdraw').value);
+      let withdrawStart = parseFloat(document.getElementById('withdrawStart').value);
+
+      let monthlyRate;
+      if (rateType === "daily") monthlyRate = rate * 30;
+      else if (rateType === "yearly") monthlyRate = rate / 12;
+      else monthlyRate = rate;
+
+      let reinvestInterval = reinvestFreq === "daily" ? 1/30 : reinvestFreq === "yearly" ? 12 : 1;
+
+      let balance = initial;
+      let totalInvested = initial;
+      let totalWithdrawn = 0;
+      let months = years * 12;
+      let labels = [];
+      let dataPoints = [];
+
+      for (let m = 1; m <= months; m++) {
+        let interest = interestType === "compound"
+          ? balance * monthlyRate
+          : initial * monthlyRate;
+
+        if (m % reinvestInterval === 0) balance += interest;
+        balance += monthlyAdd;
+        totalInvested += monthlyAdd;
+
+        if (m >= withdrawStart * 12 && withdraw > 0) {
+          balance -= withdraw;
+          totalWithdrawn += withdraw;
+        }
+
+        if (balance < 0) balance = 0;
+        labels.push(`${Math.floor(m/12)}年${m%12}ヶ月`);
+        dataPoints.push(balance);
+      }
+
+      let profit = balance - totalInvested + totalWithdrawn;
+
+      document.getElementById('result').innerHTML = `
+        <b>最終資産額：</b> ${balance.toFixed(2)} 円<br>
+        <b>総投資額：</b> ${totalInvested.toFixed(2)} 円<br>
+        <b>総引き出し額：</b> ${totalWithdrawn.toFixed(2)} 円<br>
+        <b>最終利益：</b> ${profit.toFixed(2)} 円
+      `;
+
+      // 既存チャートを削除して再描画
+      if (chartInstance) chartInstance.destroy();
+      const ctx = document.getElementById('chart').getContext('2d');
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '資産推移（円）',
+            data: dataPoints,
+            borderColor: '#007bff',
+            backgroundColor: 'transparent', /* ← 背景色を透明に */
+            borderWidth: 2,
+            tension: 0.2,
+            fill: fales /* ← 塗りつぶしを無効化 */
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: true },
+            title: { display: true, text: '資産推移グラフ' }
+          },
+          scales: {
+            y: { beginAtZero: true, title: { display: true, text: '金額（円）' } },
+            x: { title: { display: true, text: '期間（月）' } }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
